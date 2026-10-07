@@ -32,6 +32,7 @@ ApplicationWindow {
                 event.key === Qt.Key_Right || 
                 event.key === Qt.Key_W || 
                 event.key === Qt.Key_Space || 
+                event.key === Qt.Key_0 ||
                 event.key === Qt.Key_PageUp) {
                 
                 window.isForwardPressed = true;
