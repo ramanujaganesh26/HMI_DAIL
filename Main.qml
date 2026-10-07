@@ -15,8 +15,7 @@ ApplicationWindow {
     // Speed State
     property real speed: 0.0            // Current rendered speed (0 to 240 KM/H)
     property real maxSpeed: 240.0       // Maximum dial speed
-    property bool isForwardPressed: false // True while forward key or pedal button is held down
-    property string statusText: "IDLE (0 KM/H)"
+    property bool isForwardPressed: false // True while key or preset button is held down
 
     // Root Focus Scope for Keyboard Navigation
     Item {
@@ -38,7 +37,6 @@ ApplicationWindow {
                 window.isForwardPressed = true;
                 event.accepted = true;
             } else if (event.key === Qt.Key_Down || event.key === Qt.Key_Left || event.key === Qt.Key_S) {
-                // Brake key: stop raising and slow down faster
                 window.isForwardPressed = false;
                 window.speed = Math.max(0, window.speed - 8.0);
                 event.accepted = true;
@@ -54,7 +52,7 @@ ApplicationWindow {
                 event.key === Qt.Key_Space || 
                 event.key === Qt.Key_PageUp) {
                 
-                // FORWARD KEY RELEASED -> Speed immediately comes down to 0 slowly
+                // RELEASED -> Speed immediately comes down to 0 slowly
                 window.isForwardPressed = false;
                 event.accepted = true;
             }
@@ -70,19 +68,15 @@ ApplicationWindow {
                 if (window.isForwardPressed) {
                     // 1. FORWARD KEY IS PRESSED -> RAISE SPEED CONTINUOUSLY
                     if (window.speed < window.maxSpeed) {
-                        window.speed = Math.min(window.maxSpeed, window.speed + 3.2); // Smooth acceleration (+200 KM/H in ~1.2 sec)
+                        window.speed = Math.min(window.maxSpeed, window.speed + 3.2);
                     }
-                    window.statusText = "🚀 RAISING SPEED (" + Math.round(window.speed) + " KM/H)";
                 } else {
                     // 2. FORWARD KEY IS NOT PRESSED -> COME DOWN TO ZERO SLOWLY
                     if (window.speed > 0) {
-                        // Smooth progressive deceleration (-30 KM/H per second)
                         var decayRate = Math.max(0.18, window.speed * 0.014 + 0.22);
                         window.speed = Math.max(0.0, window.speed - decayRate);
-                        window.statusText = "📉 NOT PRESSING FORWARD KEY - COMING DOWN TO 0 KM/H";
                     } else {
                         window.speed = 0.0;
-                        window.statusText = "IDLE (0 KM/H)";
                     }
                 }
             }
@@ -90,64 +84,8 @@ ApplicationWindow {
 
         ColumnLayout {
             anchors.fill: parent
-            anchors.margins: 25
-            spacing: 18
-
-            // TOP CONTROL & STATUS BAR
-            RowLayout {
-                Layout.fillWidth: true
-                Layout.alignment: Qt.AlignHCenter
-
-                // FORWARD KEY INDICATOR
-                Rectangle {
-                    width: 240
-                    height: 38
-                    radius: 19
-                    color: window.isForwardPressed ? "#00f0ff25" : "#141e2e"
-                    border.color: window.isForwardPressed ? "#00f0ff" : "#2f4666"
-                    border.width: 1.5
-
-                    RowLayout {
-                        anchors.centerIn: parent
-                        spacing: 8
-
-                        Rectangle {
-                            width: 10
-                            height: 10
-                            radius: 5
-                            color: window.isForwardPressed ? "#00f0ff" : "#5a769e"
-                        }
-
-                        Text {
-                            text: window.isForwardPressed ? "FORWARD KEY: HELD (RAISING)" : "FORWARD KEY: NOT PRESSED"
-                            font.pixelSize: 11
-                            font.bold: true
-                            color: window.isForwardPressed ? "#00f0ff" : "#8eaad1"
-                        }
-                    }
-                }
-
-                Item { Layout.fillWidth: true }
-
-                // LIVE STATUS BADGE
-                Rectangle {
-                    width: 330
-                    height: 38
-                    radius: 19
-                    color: "#0a1324"
-                    border.color: (window.speed > 0 && !window.isForwardPressed) ? "#ff9900" : "#00f0ff"
-                    border.width: 1.5
-
-                    Text {
-                        anchors.centerIn: parent
-                        text: window.statusText
-                        font.pixelSize: 11
-                        font.bold: true
-                        font.letterSpacing: 1
-                        color: (window.speed > 0 && !window.isForwardPressed) ? "#ffb84d" : "#00f0ff"
-                    }
-                }
-            }
+            anchors.margins: 30
+            spacing: 25
 
             // MAIN DIAL DISPLAY CONTAINER
             Item {
@@ -305,6 +243,24 @@ ApplicationWindow {
                         target: window
                         onSpeedChanged: dialCanvas.requestPaint()
                     }
+
+                    // Dial MouseArea for Click/Hold acceleration directly on Dial
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onPressed: {
+                            window.isForwardPressed = true;
+                            rootItem.forceActiveFocus();
+                        }
+                        onReleased: {
+                            window.isForwardPressed = false;
+                            rootItem.forceActiveFocus();
+                        }
+                        onCanceled: {
+                            window.isForwardPressed = false;
+                            rootItem.forceActiveFocus();
+                        }
+                    }
                 }
 
                 // CLEAN CENTER DIGITAL SPEED POD
@@ -341,80 +297,16 @@ ApplicationWindow {
                 }
             }
 
-            // FORWARD ACCELERATION PEDAL BUTTON (RAISES SPEED WHEN HELD, COMES DOWN WHEN RELEASED)
-            Rectangle {
-                Layout.alignment: Qt.AlignHCenter
-                width: 440
-                height: 56
-                radius: 14
-                color: pedalArea.pressed ? "#00f0ff40" : (window.isForwardPressed ? "#00f0ff25" : "#111f36")
-                border.color: pedalArea.pressed || window.isForwardPressed ? "#00f0ff" : "#243a5c"
-                border.width: 2.5
-
-                RowLayout {
-                    anchors.centerIn: parent
-                    spacing: 10
-
-                    Text {
-                        text: "⬆️"
-                        font.pixelSize: 20
-                    }
-
-                    ColumnLayout {
-                        spacing: 2
-                        Text {
-                            text: window.isForwardPressed ? "RAISING SPEED... (RELEASE TO COME DOWN)" : "HOLD FORWARD KEY (UP / W / SPACE / CLICK)"
-                            font.pixelSize: 12
-                            font.bold: true
-                            font.letterSpacing: 1
-                            color: window.isForwardPressed ? "#00f0ff" : "#ffffff"
-                        }
-                        Text {
-                            text: "Raises speed while held | Comes down to 0 slowly when released"
-                            font.pixelSize: 10
-                            color: "#8eaad1"
-                        }
-                    }
-                }
-
-                MouseArea {
-                    id: pedalArea
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    onPressed: {
-                        window.isForwardPressed = true;
-                        rootItem.forceActiveFocus();
-                    }
-                    onReleased: {
-                        window.isForwardPressed = false; // RELEASED -> Comes down to 0 slowly
-                        rootItem.forceActiveFocus();
-                    }
-                    onCanceled: {
-                        window.isForwardPressed = false;
-                        rootItem.forceActiveFocus();
-                    }
-                }
-            }
-
-            // TAP / HOLD PRESET SPEED RAISERS
-            Text {
-                text: "HOLD TO RAISE TO PRESET (RELEASE TO COME DOWN TO 0):"
-                font.pixelSize: 11
-                font.bold: true
-                font.letterSpacing: 1
-                color: "#6b8ab3"
-                Layout.alignment: Qt.AlignHCenter
-            }
-
+            // CLEAN SPEED PRESET BUTTONS (30, 60, 90, 120, 160, 200 KM/H)
             RowLayout {
                 Layout.alignment: Qt.AlignHCenter
-                spacing: 10
+                spacing: 12
 
                 Repeater {
                     model: [30, 60, 90, 120, 160, 200]
                     delegate: Rectangle {
-                        width: 95
-                        height: 42
+                        width: 100
+                        height: 44
                         radius: 10
                         color: presetArea.pressed ? "#00f0ff35" : "#111b2b"
                         border.color: presetArea.pressed ? "#00f0ff" : "#21334d"
@@ -423,7 +315,7 @@ ApplicationWindow {
                         Text {
                             anchors.centerIn: parent
                             text: modelData + " KM/H"
-                            font.pixelSize: 12
+                            font.pixelSize: 13
                             font.bold: true
                             font.letterSpacing: 1
                             color: presetArea.pressed ? "#00f0ff" : "#b0cbef"
@@ -436,11 +328,11 @@ ApplicationWindow {
                             cursorShape: Qt.PointingHandCursor
                             onPressed: {
                                 window.speed = modelData;
-                                window.isForwardPressed = true; // Pressing preset boosts speed & raises
+                                window.isForwardPressed = true;
                                 rootItem.forceActiveFocus();
                             }
                             onReleased: {
-                                window.isForwardPressed = false; // Releasing preset immediately comes down to 0 slowly
+                                window.isForwardPressed = false;
                                 rootItem.forceActiveFocus();
                             }
                             onCanceled: {
@@ -454,6 +346,7 @@ ApplicationWindow {
         }
     }
 }
+
 
 
 
