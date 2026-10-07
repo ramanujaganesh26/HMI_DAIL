@@ -14,7 +14,7 @@ ApplicationWindow {
 
     // Speed State
     property real speed: 0.0            // Current rendered speed (0 to 240)
-    property real targetSpeed: 0.0      // Target speed
+    property real targetSpeed: 0.0      // Target raised speed
     property real minSpeed: 0.0
     property real maxSpeed: 240.0
     property bool autoReturnToZero: true
@@ -35,12 +35,12 @@ ApplicationWindow {
 
             if (event.key === Qt.Key_Space || event.key === Qt.Key_Up || event.key === Qt.Key_Right) {
                 window.isAccelerating = true;
-                window.targetSpeed = Math.min(window.maxSpeed, window.speed + 60);
-                if (window.targetSpeed < 40) window.targetSpeed = 140; // Default boost
+                window.targetSpeed = Math.min(window.maxSpeed, window.speed + 70);
+                if (window.targetSpeed < 50) window.targetSpeed = 160;
                 event.accepted = true;
             } else if (event.key === Qt.Key_PageUp) {
                 window.isAccelerating = true;
-                window.targetSpeed = Math.min(window.maxSpeed, window.speed + 80);
+                window.targetSpeed = Math.min(window.maxSpeed, window.speed + 100);
                 event.accepted = true;
             } else if (event.key === Qt.Key_Left || event.key === Qt.Key_Down || event.key === Qt.Key_PageDown) {
                 window.isAccelerating = false;
@@ -53,8 +53,8 @@ ApplicationWindow {
             if (event.isAutoRepeat) return;
 
             if (event.key === Qt.Key_Space || event.key === Qt.Key_Up || event.key === Qt.Key_Right || event.key === Qt.Key_PageUp) {
+                // RELEASED: Immediately start reducing speed towards 0 slowly
                 window.isAccelerating = false;
-                holdTimer.restart();
                 event.accepted = true;
             }
         }
@@ -62,49 +62,34 @@ ApplicationWindow {
         // Return to Zero / Smooth Deceleration Engine
         Timer {
             id: returnToZeroTimer
-            interval: 16 // 60 FPS update
+            interval: 16 // ~60 FPS update loop
             running: true
             repeat: true
             onTriggered: {
                 if (window.isAccelerating) {
-                    // Quick Raise to target speed
-                    if (window.speed < window.targetSpeed) {
-                        window.speed = Math.min(window.targetSpeed, window.speed + 3.5);
-                        window.statusText = "RAISING DIAL...";
-                    } else {
-                        window.speed = window.targetSpeed;
-                        window.statusText = "HOLDING SPEED";
-                    }
-                } else if (holdTimer.running) {
-                    // Ramping to preset target if not yet reached
+                    // Button Held: Ramp UP speed towards target
                     if (window.speed < window.targetSpeed) {
                         window.speed = Math.min(window.targetSpeed, window.speed + 4.0);
-                        window.statusText = "RAISING DIAL...";
+                        window.statusText = "RAISING VELOCITY (" + Math.round(window.speed) + " KM/H)";
                     } else {
-                        window.statusText = "HOLDING SPEED";
+                        window.speed = window.targetSpeed;
+                        window.statusText = "RAISED SPEED AT MAX";
                     }
                 } else if (window.autoReturnToZero && window.speed > 0) {
-                    // Slow comeback to 0 KM/H
-                    // Smooth realistic exponential/linear decay (approx 25-30 KM/H per second)
-                    var decayRate = Math.max(0.15, window.speed * 0.012 + 0.25);
+                    // Button Released: Reduce speed towards 0 slowly
+                    // Natural exponential decay (approx 30 KM/H per second)
+                    var decayRate = Math.max(0.18, window.speed * 0.014 + 0.22);
                     window.speed = Math.max(0.0, window.speed - decayRate);
                     window.targetSpeed = window.speed;
-                    window.statusText = "RETURNING TO 0 KM/H (SLOW DECAY)";
+                    window.statusText = "RELEASED - SLOWLY REDUCING TO 0 KM/H";
                 } else {
                     if (window.speed === 0) {
                         window.statusText = "IDLE (0 KM/H)";
                     } else {
-                        window.statusText = "MANUAL HOLD";
+                        window.statusText = "MANUAL SPEED HOLD";
                     }
                 }
             }
-        }
-
-        // Brief hold timer before returning to 0 after clicking a preset or key release
-        Timer {
-            id: holdTimer
-            interval: 600
-            repeat: false
         }
 
         ColumnLayout {
@@ -158,11 +143,11 @@ ApplicationWindow {
 
                 // STATUS BADGE
                 Rectangle {
-                    width: 260
+                    width: 280
                     height: 36
                     radius: 18
                     color: "#0a1324"
-                    border.color: (window.speed > 0 && !window.isAccelerating && !holdTimer.running) ? "#ff9900" : "#00f0ff"
+                    border.color: (window.speed > 0 && !window.isAccelerating) ? "#ff9900" : "#00f0ff"
                     border.width: 1.5
 
                     Text {
@@ -171,7 +156,7 @@ ApplicationWindow {
                         font.pixelSize: 11
                         font.bold: true
                         font.letterSpacing: 1
-                        color: (window.speed > 0 && !window.isAccelerating && !holdTimer.running) ? "#ffb84d" : "#00f0ff"
+                        color: (window.speed > 0 && !window.isAccelerating) ? "#ffb84d" : "#00f0ff"
                     }
                 }
             }
@@ -368,11 +353,11 @@ ApplicationWindow {
                 }
             }
 
-            // PRESS & HOLD ACCELERATION PEDAL BUTTON
+            // PRESS & HOLD ACCELERATION BUTTON (RAISES VELOCITY ON PRESS, DECAYS TO 0 ON RELEASE)
             Rectangle {
                 Layout.alignment: Qt.AlignHCenter
-                width: 380
-                height: 52
+                width: 420
+                height: 54
                 radius: 14
                 color: pedalArea.pressed ? "#00f0ff40" : (window.isAccelerating ? "#00f0ff25" : "#111f36")
                 border.color: pedalArea.pressed || window.isAccelerating ? "#00f0ff" : "#243a5c"
@@ -383,12 +368,12 @@ ApplicationWindow {
                     spacing: 10
 
                     Text {
-                        text: "⚡"
+                        text: "🚀"
                         font.pixelSize: 18
                     }
 
                     Text {
-                        text: pedalArea.pressed || window.isAccelerating ? "ACCELERATING... (RELEASE TO DECAY)" : "HOLD TO RAISE DIAL (SPACE / CLICK)"
+                        text: pedalArea.pressed || window.isAccelerating ? "RAISING VELOCITY... (RELEASE TO DECAY)" : "HOLD TO RAISE VELOCITY (RELEASE -> DECAY TO 0)"
                         font.pixelSize: 12
                         font.bold: true
                         font.letterSpacing: 1
@@ -402,12 +387,11 @@ ApplicationWindow {
                     cursorShape: Qt.PointingHandCursor
                     onPressed: {
                         window.isAccelerating = true;
-                        window.targetSpeed = 200; // Raise target speed up to 200 KM/H while held
+                        window.targetSpeed = 240; // Raise target speed up to max while held
                         rootItem.forceActiveFocus();
                     }
                     onReleased: {
-                        window.isAccelerating = false;
-                        holdTimer.restart();
+                        window.isAccelerating = false; // RELEASED: Immediately reduce speed towards zero slowly
                         rootItem.forceActiveFocus();
                     }
                     onCanceled: {
@@ -417,9 +401,9 @@ ApplicationWindow {
                 }
             }
 
-            // SPEED PRESET BUTTONS (30, 60, 90, 120, 160, 200 KM/H)
+            // PRESET RAISE VELOCITY BUTTONS (30, 60, 90, 120, 160, 200 KM/H)
             Text {
-                text: "PRESET DIAL RAISER (RAISES & SLOWLY RETURNS TO 0):"
+                text: "PRESS & HOLD PRESETS (RELEASE TO SLOWLY REDUCE TO 0):"
                 font.pixelSize: 11
                 font.bold: true
                 font.letterSpacing: 1
@@ -437,8 +421,8 @@ ApplicationWindow {
                         width: 95
                         height: 42
                         radius: 10
-                        color: Math.round(window.speed) === modelData ? "#00f0ff30" : "#111b2b"
-                        border.color: Math.round(window.speed) === modelData ? "#00f0ff" : "#21334d"
+                        color: (presetArea.pressed || (window.isAccelerating && window.targetSpeed === modelData)) ? "#00f0ff35" : "#111b2b"
+                        border.color: (presetArea.pressed || (window.isAccelerating && window.targetSpeed === modelData)) ? "#00f0ff" : "#21334d"
                         border.width: 2
 
                         Text {
@@ -447,17 +431,25 @@ ApplicationWindow {
                             font.pixelSize: 12
                             font.bold: true
                             font.letterSpacing: 1
-                            color: Math.round(window.speed) === modelData ? "#00f0ff" : "#b0cbef"
+                            color: (presetArea.pressed || (window.isAccelerating && window.targetSpeed === modelData)) ? "#00f0ff" : "#b0cbef"
                         }
 
                         MouseArea {
+                            id: presetArea
                             anchors.fill: parent
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
-                            onClicked: {
-                                window.isAccelerating = false;
+                            onPressed: {
+                                window.isAccelerating = true;
                                 window.targetSpeed = modelData;
-                                holdTimer.restart();
+                                rootItem.forceActiveFocus();
+                            }
+                            onReleased: {
+                                window.isAccelerating = false; // RELEASED: Immediately reduce speed towards zero slowly
+                                rootItem.forceActiveFocus();
+                            }
+                            onCanceled: {
+                                window.isAccelerating = false;
                                 rootItem.forceActiveFocus();
                             }
                         }
@@ -467,4 +459,5 @@ ApplicationWindow {
         }
     }
 }
+
 
