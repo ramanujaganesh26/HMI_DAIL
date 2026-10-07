@@ -4,18 +4,22 @@ import QtQuick.Layouts
 
 ApplicationWindow {
     id: window
-    width: 850
-    height: 850
-    minimumWidth: 500
-    minimumHeight: 520
+    width: 880
+    height: 900
+    minimumWidth: 550
+    minimumHeight: 600
     visible: true
     title: qsTr("KM/H Precision Speedometer Dial")
     color: "#05070c"
 
-    // Speed State - Default Starting at 0 KM/H
-    property real speed: 0.0           // Default speed set to 0 KM/H (0 to 240)
+    // Speed State
+    property real speed: 0.0            // Current rendered speed (0 to 240)
+    property real targetSpeed: 0.0      // Target speed
     property real minSpeed: 0.0
     property real maxSpeed: 240.0
+    property bool autoReturnToZero: true
+    property bool isAccelerating: false
+    property string statusText: "IDLE (0 KM/H)"
 
     // Root Focus Scope for Keyboard Navigation
     Item {
@@ -25,27 +29,152 @@ ApplicationWindow {
 
         Component.onCompleted: rootItem.forceActiveFocus()
 
-        // Keyboard Shortcuts Handler
+        // Keyboard Event Handlers for Press & Release Acceleration
         Keys.onPressed: (event) => {
-            if (event.key === Qt.Key_Left || event.key === Qt.Key_Down) {
-                window.speed = Math.max(window.minSpeed, window.speed - 5);
-                event.accepted = true;
-            } else if (event.key === Qt.Key_Right || event.key === Qt.Key_Up) {
-                window.speed = Math.min(window.maxSpeed, window.speed + 5);
+            if (event.isAutoRepeat) return;
+
+            if (event.key === Qt.Key_Space || event.key === Qt.Key_Up || event.key === Qt.Key_Right) {
+                window.isAccelerating = true;
+                window.targetSpeed = Math.min(window.maxSpeed, window.speed + 60);
+                if (window.targetSpeed < 40) window.targetSpeed = 140; // Default boost
                 event.accepted = true;
             } else if (event.key === Qt.Key_PageUp) {
-                window.speed = Math.min(window.maxSpeed, window.speed + 20);
+                window.isAccelerating = true;
+                window.targetSpeed = Math.min(window.maxSpeed, window.speed + 80);
                 event.accepted = true;
-            } else if (event.key === Qt.Key_PageDown) {
-                window.speed = Math.max(window.minSpeed, window.speed - 20);
+            } else if (event.key === Qt.Key_Left || event.key === Qt.Key_Down || event.key === Qt.Key_PageDown) {
+                window.isAccelerating = false;
+                window.targetSpeed = Math.max(window.minSpeed, window.speed - 30);
                 event.accepted = true;
             }
+        }
+
+        Keys.onReleased: (event) => {
+            if (event.isAutoRepeat) return;
+
+            if (event.key === Qt.Key_Space || event.key === Qt.Key_Up || event.key === Qt.Key_Right || event.key === Qt.Key_PageUp) {
+                window.isAccelerating = false;
+                holdTimer.restart();
+                event.accepted = true;
+            }
+        }
+
+        // Return to Zero / Smooth Deceleration Engine
+        Timer {
+            id: returnToZeroTimer
+            interval: 16 // 60 FPS update
+            running: true
+            repeat: true
+            onTriggered: {
+                if (window.isAccelerating) {
+                    // Quick Raise to target speed
+                    if (window.speed < window.targetSpeed) {
+                        window.speed = Math.min(window.targetSpeed, window.speed + 3.5);
+                        window.statusText = "RAISING DIAL...";
+                    } else {
+                        window.speed = window.targetSpeed;
+                        window.statusText = "HOLDING SPEED";
+                    }
+                } else if (holdTimer.running) {
+                    // Ramping to preset target if not yet reached
+                    if (window.speed < window.targetSpeed) {
+                        window.speed = Math.min(window.targetSpeed, window.speed + 4.0);
+                        window.statusText = "RAISING DIAL...";
+                    } else {
+                        window.statusText = "HOLDING SPEED";
+                    }
+                } else if (window.autoReturnToZero && window.speed > 0) {
+                    // Slow comeback to 0 KM/H
+                    // Smooth realistic exponential/linear decay (approx 25-30 KM/H per second)
+                    var decayRate = Math.max(0.15, window.speed * 0.012 + 0.25);
+                    window.speed = Math.max(0.0, window.speed - decayRate);
+                    window.targetSpeed = window.speed;
+                    window.statusText = "RETURNING TO 0 KM/H (SLOW DECAY)";
+                } else {
+                    if (window.speed === 0) {
+                        window.statusText = "IDLE (0 KM/H)";
+                    } else {
+                        window.statusText = "MANUAL HOLD";
+                    }
+                }
+            }
+        }
+
+        // Brief hold timer before returning to 0 after clicking a preset or key release
+        Timer {
+            id: holdTimer
+            interval: 600
+            repeat: false
         }
 
         ColumnLayout {
             anchors.fill: parent
             anchors.margins: 25
-            spacing: 20
+            spacing: 18
+
+            // TOP CONTROL BAR & AUTO-RETURN TOGGLE
+            RowLayout {
+                Layout.fillWidth: true
+                Layout.alignment: Qt.AlignHCenter
+
+                Rectangle {
+                    width: 220
+                    height: 36
+                    radius: 18
+                    color: window.autoReturnToZero ? "#00f0ff15" : "#1a2436"
+                    border.color: window.autoReturnToZero ? "#00f0ff" : "#3b5275"
+                    border.width: 1.5
+
+                    RowLayout {
+                        anchors.centerIn: parent
+                        spacing: 8
+
+                        Rectangle {
+                            width: 10
+                            height: 10
+                            radius: 5
+                            color: window.autoReturnToZero ? "#00f0ff" : "#7a95b8"
+                        }
+
+                        Text {
+                            text: window.autoReturnToZero ? "Auto-Return to 0: ON" : "Auto-Return to 0: OFF"
+                            font.pixelSize: 12
+                            font.bold: true
+                            color: window.autoReturnToZero ? "#00f0ff" : "#a0b8d8"
+                        }
+                    }
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: {
+                            window.autoReturnToZero = !window.autoReturnToZero;
+                            rootItem.forceActiveFocus();
+                        }
+                    }
+                }
+
+                Item { Layout.fillWidth: true }
+
+                // STATUS BADGE
+                Rectangle {
+                    width: 260
+                    height: 36
+                    radius: 18
+                    color: "#0a1324"
+                    border.color: (window.speed > 0 && !window.isAccelerating && !holdTimer.running) ? "#ff9900" : "#00f0ff"
+                    border.width: 1.5
+
+                    Text {
+                        anchors.centerIn: parent
+                        text: window.statusText
+                        font.pixelSize: 11
+                        font.bold: true
+                        font.letterSpacing: 1
+                        color: (window.speed > 0 && !window.isAccelerating && !holdTimer.running) ? "#ffb84d" : "#00f0ff"
+                    }
+                }
+            }
 
             // MAIN DIAL DISPLAY CONTAINER
             Item {
@@ -208,11 +337,11 @@ ApplicationWindow {
                 // CLEAN CENTER DIGITAL SPEED POD
                 Rectangle {
                     anchors.centerIn: parent
-                    width: 155
-                    height: 155
-                    radius: 77.5
+                    width: 160
+                    height: 160
+                    radius: 80
                     color: "#0c1524"
-                    border.color: "#00f0ff"
+                    border.color: (window.speed >= 180) ? "#ff1a53" : "#00f0ff"
                     border.width: 3
 
                     ColumnLayout {
@@ -221,7 +350,7 @@ ApplicationWindow {
 
                         Text {
                             text: Math.round(window.speed).toString()
-                            font.pixelSize: 60
+                            font.pixelSize: 58
                             font.bold: true
                             color: "#ffffff"
                             Layout.alignment: Qt.AlignHCenter
@@ -239,16 +368,74 @@ ApplicationWindow {
                 }
             }
 
-            // SPEED PRESET BUTTONS (10, 30, 50, 70, 120, 180 KM/H)
+            // PRESS & HOLD ACCELERATION PEDAL BUTTON
+            Rectangle {
+                Layout.alignment: Qt.AlignHCenter
+                width: 380
+                height: 52
+                radius: 14
+                color: pedalArea.pressed ? "#00f0ff40" : (window.isAccelerating ? "#00f0ff25" : "#111f36")
+                border.color: pedalArea.pressed || window.isAccelerating ? "#00f0ff" : "#243a5c"
+                border.width: 2.5
+
+                RowLayout {
+                    anchors.centerIn: parent
+                    spacing: 10
+
+                    Text {
+                        text: "⚡"
+                        font.pixelSize: 18
+                    }
+
+                    Text {
+                        text: pedalArea.pressed || window.isAccelerating ? "ACCELERATING... (RELEASE TO DECAY)" : "HOLD TO RAISE DIAL (SPACE / CLICK)"
+                        font.pixelSize: 12
+                        font.bold: true
+                        font.letterSpacing: 1
+                        color: pedalArea.pressed || window.isAccelerating ? "#00f0ff" : "#d0e4ff"
+                    }
+                }
+
+                MouseArea {
+                    id: pedalArea
+                    anchors.fill: parent
+                    cursorShape: Qt.PointingHandCursor
+                    onPressed: {
+                        window.isAccelerating = true;
+                        window.targetSpeed = 200; // Raise target speed up to 200 KM/H while held
+                        rootItem.forceActiveFocus();
+                    }
+                    onReleased: {
+                        window.isAccelerating = false;
+                        holdTimer.restart();
+                        rootItem.forceActiveFocus();
+                    }
+                    onCanceled: {
+                        window.isAccelerating = false;
+                        rootItem.forceActiveFocus();
+                    }
+                }
+            }
+
+            // SPEED PRESET BUTTONS (30, 60, 90, 120, 160, 200 KM/H)
+            Text {
+                text: "PRESET DIAL RAISER (RAISES & SLOWLY RETURNS TO 0):"
+                font.pixelSize: 11
+                font.bold: true
+                font.letterSpacing: 1
+                color: "#6b8ab3"
+                Layout.alignment: Qt.AlignHCenter
+            }
+
             RowLayout {
                 Layout.alignment: Qt.AlignHCenter
-                spacing: 12
+                spacing: 10
 
                 Repeater {
-                    model: [10, 30, 50, 70, 120, 180]
+                    model: [30, 60, 90, 120, 160, 200]
                     delegate: Rectangle {
-                        width: 100
-                        height: 44
+                        width: 95
+                        height: 42
                         radius: 10
                         color: Math.round(window.speed) === modelData ? "#00f0ff30" : "#111b2b"
                         border.color: Math.round(window.speed) === modelData ? "#00f0ff" : "#21334d"
@@ -257,7 +444,7 @@ ApplicationWindow {
                         Text {
                             anchors.centerIn: parent
                             text: modelData + " KM/H"
-                            font.pixelSize: 13
+                            font.pixelSize: 12
                             font.bold: true
                             font.letterSpacing: 1
                             color: Math.round(window.speed) === modelData ? "#00f0ff" : "#b0cbef"
@@ -268,7 +455,9 @@ ApplicationWindow {
                             hoverEnabled: true
                             cursorShape: Qt.PointingHandCursor
                             onClicked: {
-                                window.speed = modelData;
+                                window.isAccelerating = false;
+                                window.targetSpeed = modelData;
+                                holdTimer.restart();
                                 rootItem.forceActiveFocus();
                             }
                         }
@@ -278,3 +467,4 @@ ApplicationWindow {
         }
     }
 }
+
