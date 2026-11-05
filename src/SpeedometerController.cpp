@@ -32,9 +32,9 @@ SpeedometerController::SpeedometerController(QObject *parent)
 
 void SpeedometerController::setSpeed(double speed)
 {
-    speed = qBound(0.0, speed, maxSpeed());
-    if (!qFuzzyCompare(m_speed, speed)) {
-        m_speed = speed;
+    const double boundedSpeed = qBound(0.0, speed, maxSpeed());
+    if (!qFuzzyCompare(m_speed, boundedSpeed)) {
+        m_speed = boundedSpeed;
         updateRpmAndGear();
         emit speedChanged();
     }
@@ -134,7 +134,7 @@ void SpeedometerController::updatePhysics()
         }
     } else {
         if (m_speed > 0.0) {
-            double decayRate = qMax(0.18, m_speed * 0.014 + 0.22);
+            const double decayRate = qMax(0.18, m_speed * 0.014 + 0.22);
             setSpeed(qMax(0.0, m_speed - decayRate));
         } else {
             setSpeed(0.0);
@@ -142,13 +142,13 @@ void SpeedometerController::updatePhysics()
     }
 
     // Instantaneous acceleration (m/s^2) calculation
-    double deltaV_ms = (m_speed - m_prevSpeed) / 3.6;
-    double dt = 0.016; // 16ms
+    constexpr double dt = 0.016; // 16ms
+    const double deltaV_ms = (m_speed - m_prevSpeed) / 3.6;
     m_acceleration = deltaV_ms / dt;
     m_prevSpeed = m_speed;
 
     // Distance integration x(t) = integral(v dt) in meters
-    double v_ms = m_speed / 3.6;
+    const double v_ms = m_speed / 3.6;
     m_distance += v_ms * dt;
 
     emit accelerationChanged();
@@ -159,16 +159,16 @@ void SpeedometerController::sampleTelemetry()
 {
     if (!m_isLoggingActive) return;
 
-    double spdVal = qRound(m_speed * 10.0) / 10.0;
-    double distVal = qRound(m_distance * 10.0) / 10.0;
-    double accelVal = qRound(m_acceleration * 10.0) / 10.0;
+    const double spdVal = qRound(m_speed * 10.0) / 10.0;
+    const double distVal = qRound(m_distance * 10.0) / 10.0;
+    const double accelVal = qRound(m_acceleration * 10.0) / 10.0;
 
     // Update Stats
     if (spdVal > m_peakSpeed) {
         m_peakSpeed = spdVal;
     }
     m_totalSpeedSum += spdVal;
-    int count = m_telemetryModel->rowCount() + 1;
+    const int count = m_telemetryModel->rowCount() + 1;
     m_avgSpeed = qRound((m_totalSpeedSum / count) * 10.0) / 10.0;
 
     // Record into Model
